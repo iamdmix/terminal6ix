@@ -8,12 +8,14 @@ ALGORITHM = "HS256"
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# Password hashing
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 def verify_password(password: str, hashed: str) -> bool:
     return pwd_context.verify(password, hashed)
 
+# Token creation
 def create_access_token(data: dict, role: str):
     """Create JWT token with expiry based on role."""
     if role == "participant":
@@ -21,7 +23,7 @@ def create_access_token(data: dict, role: str):
     elif role == "organiser":
         expires_delta = timedelta(days=7)
     else:
-        expires_delta = timedelta(minutes=60)  # fallback
+        expires_delta = timedelta(minutes=60)
 
     to_encode = data.copy()
     expire = datetime.utcnow() + expires_delta

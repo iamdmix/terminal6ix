@@ -23,6 +23,5 @@ class UserOut(BaseModel):
     email: EmailStr
     role: UserRole
 
-    model_config = {
-        "from_attributes": True  # replaces orm_mode in Pydantic v2
-    }
+    class Config:
+        from_attributes = True
