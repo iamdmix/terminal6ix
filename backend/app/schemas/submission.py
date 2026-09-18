@@ -18,3 +18,14 @@ class SubmissionOut(BaseModel):
     submitted_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class SolveOut(BaseModel):
+    """A correct solve by the current user, for progress tracking."""
+
+    id: UUID
+    challenge_id: UUID
+    points_awarded: int
+    submitted_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

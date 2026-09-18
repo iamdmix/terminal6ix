@@ -51,3 +51,28 @@ app.include_router(challenges_router.router, tags=["Challenges & Submissions"])
 @app.get("/health", tags=["Health"])
 def health():
     return {"status": "ok"}
+
+
+@app.get("/stats", tags=["Health"])
+def platform_stats():
+    """Public, live platform counters for the landing/community pages."""
+    from sqlalchemy import func
+
+    from app.database import SessionLocal
+    from app.models import Challenge, Event, Submission, User
+
+    db = SessionLocal()
+    try:
+        return {
+            "users": db.query(func.count(User.id)).scalar() or 0,
+            "events": db.query(func.count(Event.id)).scalar() or 0,
+            "challenges": db.query(func.count(Challenge.id)).scalar() or 0,
+            "flags_captured": (
+                db.query(func.count(Submission.id))
+                .filter(Submission.is_correct.is_(True))
+                .scalar()
+                or 0
+            ),
+        }
+    finally:
+        db.close()
