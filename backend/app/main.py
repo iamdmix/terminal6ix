@@ -5,13 +5,14 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.endpoints import challenges as challenges_router
-from app.api.endpoints import events as events_router
-from app.api.endpoints import registrations as registrations_router
-from app.api.endpoints import users as auth_router
-from app.database import Base, engine
-
+# Ensure .env is loaded before any module-level os.getenv() calls.
 load_dotenv()
+
+from app.api.endpoints import challenges as challenges_router  # noqa: E402
+from app.api.endpoints import events as events_router  # noqa: E402
+from app.api.endpoints import registrations as registrations_router  # noqa: E402
+from app.api.endpoints import users as auth_router  # noqa: E402
+from app.database import Base, engine  # noqa: E402
 
 # This creates tables on startup (for development only)
 Base.metadata.create_all(bind=engine)
