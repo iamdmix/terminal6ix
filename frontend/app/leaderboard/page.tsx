@@ -1,277 +1,257 @@
 "use client"
 
+import { AppShell } from "@/components/app-shell"
 import { useAuth } from "@/components/auth-provider"
-import { Header } from "@/components/header"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
+import { Chip, EmptyState, LoadingRows, Panel, PanelHeader, PhaseDot, Spinner } from "@/components/ui-kit"
 import { api } from "@/lib/api"
-import { eventStatus, formatDateTime, useEvents } from "@/lib/hooks"
+import { eventPhase, timeAgo, useEvents, usePoll } from "@/lib/hooks"
 import { ApiError, LeaderboardEntry } from "@/lib/types"
-import { Award, Lock, Medal, RefreshCw, Trophy } from "lucide-react"
-import { useRouter } from "next/navigation"
-import { useCallback, useEffect, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { Suspense, useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 
-function getRankIcon(rank: number) {
-  if (rank === 1) return <Trophy className="w-6 h-6 text-yellow-500" />
-  if (rank === 2) return <Medal className="w-6 h-6 text-gray-400" />
-  if (rank === 3) return <Award className="w-6 h-6 text-amber-600" />
-  return <span className="w-6 h-6 flex items-center justify-center text-muted-foreground font-bold">#{rank}</span>
+function Podium({ entries }: { entries: LeaderboardEntry[] }) {
+  if (entries.length < 3) return null
+  const places = [
+    { entry: entries[1], medal: "2", cls: "md:order-1 md:mt-8" },
+    { entry: entries[0], medal: "1", cls: "md:order-2" },
+    { entry: entries[2], medal: "3", cls: "md:order-3 md:mt-12" },
+  ]
+  return (
+    <div className="mb-6 grid gap-3 md:grid-cols-3">
+      {places.map(({ entry, medal, cls }) => (
+        <div
+          key={entry.user_id}
+          className={`border bg-panel px-5 py-5 ${
+            medal === "1" ? "border-primary/60" : "border-line"
+          } ${cls}`}
+        >
+          <div className="flex items-baseline justify-between">
+            <span
+              className={`font-display text-3xl font-bold ${
+                medal === "1" ? "text-primary" : "text-faint"
+              }`}
+            >
+              {medal}
+            </span>
+            <span className="text-[12px] text-muted-foreground">
+              {entry.score.toLocaleString()} pts
+            </span>
+          </div>
+          <div className="mt-1 truncate font-display text-lg font-semibold text-foreground">
+            {entry.user_name}
+          </div>
+          <div className="mt-0.5 text-[12px] text-faint">
+            {entry.solved_count} solved · last {timeAgo(entry.last_solve_at)}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
-function timeAgo(iso: string | null) {
-  if (!iso) return "—"
-  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (seconds < 60) return `${seconds}s ago`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`
-  return `${Math.floor(seconds / 86400)}d ago`
-}
-
-export default function LeaderboardPage() {
+function LeaderboardInner() {
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
+  const params = useSearchParams()
   const { events, loading: eventsLoading } = useEvents()
 
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const requested = params.get("event")
+  const [selectedId, setSelectedId] = useState<string | null>(requested)
   const [entries, setEntries] = useState<LeaderboardEntry[]>([])
-  const [challengeCount, setChallengeCount] = useState(0)
-  const [totalPoints, setTotalPoints] = useState(0)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
-  const selectedEvent = events.find((e) => e.id === selectedEventId)
+  useEffect(() => {
+    if (!selectedId && events.length > 0) {
+      const live = events.find((e) => eventPhase(e) === "live") ?? events[0]
+      setSelectedId(live.id)
+    }
+  }, [events, selectedId])
 
   const loadBoard = useCallback(
-    async (eventId: string, showSpinner = true) => {
-      if (showSpinner) setRefreshing(true)
+    async (eventId: string, spinner = true) => {
+      if (spinner) setRefreshing(true)
       try {
-        const board = await api.get<LeaderboardEntry[]>(`/events/${eventId}/leaderboard`)
-        setEntries(board)
-        if (selectedEvent) {
-          setChallengeCount(selectedEvent.challenge_count)
-          setTotalPoints(selectedEvent.total_points)
-        }
+        setEntries(await api.get<LeaderboardEntry[]>(`/events/${eventId}/leaderboard`))
       } catch (e) {
         toast.error(e instanceof ApiError ? e.message : "Failed to load leaderboard")
       } finally {
-        if (showSpinner) setRefreshing(false)
         setLoading(false)
+        setRefreshing(false)
       }
     },
-    [selectedEvent],
+    [],
   )
 
-  // Auto-select the first live event
   useEffect(() => {
-    if (!selectedEventId && events.length > 0) {
-      const live = events.find((e) => eventStatus(e).label === "Live") || events[0]
-      setSelectedEventId(live.id)
+    if (selectedId) {
+      setLoading(true)
+      loadBoard(selectedId, false)
     }
-  }, [events, selectedEventId])
+  }, [selectedId, loadBoard])
 
-  // Load on selection + poll every 15s for live updates
-  useEffect(() => {
-    if (!selectedEventId) return
-    setLoading(true)
-    loadBoard(selectedEventId, false)
-    const timer = setInterval(() => loadBoard(selectedEventId, false), 15000)
-    return () => clearInterval(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedEventId])
+  usePoll(() => selectedId && loadBoard(selectedId, false), 15000, !!selectedId)
 
   if (!authLoading && !user) {
     return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <main className="max-w-md mx-auto px-6 py-32 text-center">
-          <Lock className="w-12 h-12 text-muted-foreground mx-auto mb-6" />
-          <h1 className="text-2xl font-bold text-foreground mb-3">Sign in to view leaderboards</h1>
-          <p className="text-muted-foreground mb-8">
-            Live rankings are per-event and require authentication.
-          </p>
-          <div className="flex gap-3 justify-center">
-            <button onClick={() => router.push("/signin")} className="text-primary hover:underline">
-              Sign In
-            </button>
-            <button onClick={() => router.push("/signup")} className="text-primary hover:underline">
-              Create Account
-            </button>
-          </div>
+      <AppShell>
+        <main className="mx-auto max-w-[1200px] px-4 py-20 sm:px-6">
+          <EmptyState
+            title="Leaderboards need an account."
+            hint="Sign in to see per-event rankings as they update."
+            action={
+              <button
+                onClick={() => router.push("/signin")}
+                className="border border-primary bg-primary/10 px-5 py-2 text-sm text-primary transition-colors hover:bg-primary/20"
+              >
+                sign in
+              </button>
+            }
+          />
         </main>
-      </div>
+      </AppShell>
     )
   }
 
+  const selectedEvent = events.find((e) => e.id === selectedId)
   const myEntry = entries.find((e) => e.user_id === user?.id)
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-
-      <main className="max-w-7xl mx-auto px-6 py-12">
-        <div className="text-center mb-10">
-          <h1 className="text-4xl md:text-6xl font-bold text-foreground mb-4">
-            Live{" "}
-            <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-              Leaderboard
-            </span>
-          </h1>
-          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-            Real-time rankings — auto-refreshes every 15 seconds.
-          </p>
+    <AppShell>
+      <main className="mx-auto max-w-[1000px] px-4 py-12 sm:px-6">
+        <div className="mb-8 flex items-end justify-between">
+          <div>
+            <h1 className="font-display text-3xl font-bold text-foreground">Leaderboard</h1>
+            <p className="mt-1 text-[14px] text-muted-foreground">
+              Rescored on every accepted flag · auto-refresh 15s
+              {refreshing && <Spinner className="ml-2 align-middle" />}
+            </p>
+          </div>
+          {selectedEvent && (
+            <div className="hidden items-center gap-2 sm:flex">
+              <PhaseDot phase={eventPhase(selectedEvent)} />
+              <span className="text-[12px] text-muted-foreground">
+                {eventPhase(selectedEvent) === "live" ? "scoring live" : eventPhase(selectedEvent)}
+              </span>
+            </div>
+          )}
         </div>
 
-        {/* Event selector */}
+        {/* Event tabs */}
         {eventsLoading ? (
-          <div className="flex justify-center gap-3 mb-10">
-            <Skeleton className="h-10 w-64" /><Skeleton className="h-10 w-64" />
-          </div>
+          <LoadingRows rows={1} />
+        ) : events.length === 0 ? (
+          <EmptyState title="No events yet." hint="Rankings appear once events exist." />
         ) : (
-          <div className="flex flex-wrap justify-center gap-3 mb-10">
+          <div className="mb-8 flex flex-wrap gap-2">
             {events.map((event) => {
-              const status = eventStatus(event)
+              const active = event.id === selectedId
               return (
                 <button
                   key={event.id}
-                  onClick={() => setSelectedEventId(event.id)}
-                  className={`px-4 py-2 rounded-full border text-sm transition-colors flex items-center gap-2 ${
-                    event.id === selectedEventId
+                  onClick={() => setSelectedId(event.id)}
+                  className={`flex items-center gap-2 border px-3.5 py-1.5 text-[13px] transition-colors ${
+                    active
                       ? "border-primary bg-primary/10 text-primary"
-                      : "border-border text-muted-foreground hover:text-foreground"
+                      : "border-line text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <span className={`w-2 h-2 rounded-full ${
-                    status.label === "Live" ? "bg-green-500 animate-pulse" : status.label === "Upcoming" ? "bg-blue-500" : "bg-gray-500"
-                  }`} />
+                  <PhaseDot phase={eventPhase(event)} />
                   {event.name}
                 </button>
               )
             })}
-            {events.length === 0 && <p className="text-muted-foreground">No events yet.</p>}
           </div>
         )}
 
-        {/* Stats Bar */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-          <div className="bg-card border border-border rounded-lg p-6 text-center">
-            <div className="text-3xl font-bold text-primary mb-2">{entries.length}</div>
-            <div className="text-sm text-muted-foreground">Competitors</div>
+        {selectedEvent && (
+          <div className="mb-6 flex flex-wrap gap-x-6 gap-y-1 text-[12px] text-faint">
+            <span>{selectedEvent.participant_count} players</span>
+            <span>{selectedEvent.challenge_count} challenges</span>
+            <span>{selectedEvent.total_points} pts total</span>
           </div>
-          <div className="bg-card border border-border rounded-lg p-6 text-center">
-            <div className="text-3xl font-bold text-secondary mb-2">{challengeCount}</div>
-            <div className="text-sm text-muted-foreground">Challenges</div>
-          </div>
-          <div className="bg-card border border-border rounded-lg p-6 text-center">
-            <div className="text-3xl font-bold text-primary mb-2">{totalPoints}</div>
-            <div className="text-sm text-muted-foreground">Total Points</div>
-          </div>
-          <div className="bg-card border border-border rounded-lg p-6 text-center">
-            <div className="text-3xl font-bold text-secondary mb-2">
-              {selectedEvent ? eventStatus(selectedEvent).label : "—"}
-            </div>
-            <div className="text-sm text-muted-foreground">Event Status</div>
-          </div>
-        </div>
+        )}
 
-        {/* Leaderboard Table */}
         {loading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-16" />)}
-          </div>
+          <LoadingRows rows={5} />
+        ) : entries.length === 0 ? (
+          <EmptyState
+            title="No solves yet."
+            hint="First accepted flag takes rank 1 — it could be yours."
+            action={
+              selectedEvent && (
+                <button
+                  onClick={() => router.push(`/events/${selectedEvent.id}`)}
+                  className="border border-primary bg-primary/10 px-5 py-2 text-sm text-primary transition-colors hover:bg-primary/20"
+                >
+                  enter {selectedEvent.name} →
+                </button>
+              )
+            }
+          />
         ) : (
-          <div className="bg-card border border-border rounded-lg overflow-hidden">
-            <div className="p-6 border-b border-border flex items-center justify-between">
+          <>
+            <Podium entries={entries} />
+            <Panel>
+              <PanelHeader label={`rankings · ${entries.length}`} />
               <div>
-                <h2 className="text-2xl font-semibold text-foreground">
-                  {selectedEvent?.name || "Rankings"}
-                </h2>
-                <p className="text-muted-foreground text-sm">
-                  {selectedEvent && `${formatDateTime(selectedEvent.start_time)} → ${formatDateTime(selectedEvent.end_time)}`}
-                </p>
-              </div>
-              <button
-                onClick={() => selectedEventId && loadBoard(selectedEventId)}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
-              >
-                <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} /> Refresh
-              </button>
-            </div>
-
-            {entries.length === 0 ? (
-              <div className="p-12 text-center text-muted-foreground">
-                No solves yet — be the first to capture a flag!
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-muted/50">
-                    <tr>
-                      <th className="text-left p-4 font-semibold text-foreground">Rank</th>
-                      <th className="text-left p-4 font-semibold text-foreground">Player</th>
-                      <th className="text-left p-4 font-semibold text-foreground">Score</th>
-                      <th className="text-left p-4 font-semibold text-foreground">Solved</th>
-                      <th className="text-left p-4 font-semibold text-foreground">Last Solve</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {entries.map((entry) => (
-                      <tr
-                        key={entry.user_id}
-                        className={`border-b border-border transition-colors ${
-                          entry.user_id === user?.id ? "bg-primary/5" : "hover:bg-muted/30"
+                {entries.map((entry) => {
+                  const mine = entry.user_id === user?.id
+                  return (
+                    <div
+                      key={entry.user_id}
+                      className={`trow grid grid-cols-[3rem_1fr_5rem_5rem_6rem] items-center px-4 py-3 sm:grid-cols-[3rem_1fr_7rem_6rem_7rem] ${
+                        mine ? "bg-primary/5" : ""
+                      }`}
+                    >
+                      <span
+                        className={`font-display text-lg font-semibold ${
+                          entry.rank === 1
+                            ? "text-primary"
+                            : entry.rank <= 3
+                              ? "text-foreground"
+                              : "text-faint"
                         }`}
                       >
-                        <td className="p-4">
-                          <div className="flex items-center gap-3">{getRankIcon(entry.rank)}</div>
-                        </td>
-                        <td className="p-4">
-                          <div className="font-semibold text-foreground">
-                            {entry.user_name}
-                            {entry.user_id === user?.id && (
-                              <Badge variant="outline" className="ml-2 border-primary/40 text-primary">you</Badge>
-                            )}
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <div className="font-bold text-primary text-lg">{entry.score.toLocaleString()}</div>
-                        </td>
-                        <td className="p-4">
-                          <Badge variant="outline">{entry.solved_count} challenges</Badge>
-                        </td>
-                        <td className="p-4">
-                          <div className="text-sm text-muted-foreground">{timeAgo(entry.last_solve_at)}</div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        {String(entry.rank).padStart(2, "0")}
+                      </span>
+                      <span className="min-w-0 truncate text-[14px] text-foreground">
+                        {entry.user_name}
+                        {mine && <Chip tone="amber" className="ml-2">you</Chip>}
+                      </span>
+                      <span className="text-right text-[14px] text-primary">
+                        {entry.score.toLocaleString()}
+                      </span>
+                      <span className="text-right text-[13px] text-muted-foreground">
+                        {entry.solved_count}
+                      </span>
+                      <span className="text-right text-[12px] text-faint">
+                        {timeAgo(entry.last_solve_at)}
+                      </span>
+                    </div>
+                  )
+                })}
               </div>
-            )}
-          </div>
+            </Panel>
+          </>
         )}
 
-        {/* Your stats */}
         {myEntry && (
-          <div className="mt-12 bg-gradient-to-r from-primary/10 to-secondary/10 border border-primary/20 rounded-lg p-6">
-            <h3 className="text-xl font-semibold text-foreground mb-4">Your Performance</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-primary">#{myEntry.rank}</div>
-                <div className="text-sm text-muted-foreground">Current Rank</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-secondary">{myEntry.score}</div>
-                <div className="text-sm text-muted-foreground">Total Score</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-primary">{myEntry.solved_count}</div>
-                <div className="text-sm text-muted-foreground">Challenges Solved</div>
-              </div>
-            </div>
-          </div>
+          <p className="mt-4 text-[13px] text-muted-foreground">
+            you: rank <span className="text-primary">#{myEntry.rank}</span> ·{" "}
+            {myEntry.score.toLocaleString()} pts · {myEntry.solved_count} solved
+          </p>
         )}
       </main>
-    </div>
+    </AppShell>
+  )
+}
+
+export default function LeaderboardPage() {
+  return (
+    <Suspense>
+      <LeaderboardInner />
+    </Suspense>
   )
 }

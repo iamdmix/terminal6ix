@@ -1,101 +1,90 @@
 "use client"
 
 import { useAuth } from "@/components/auth-provider"
-import { Header } from "@/components/header"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { AppShell } from "@/components/app-shell"
+import { Panel, PanelHeader, Spinner } from "@/components/ui-kit"
 import { ApiError } from "@/lib/types"
-import { KeyRound, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { FormEvent, useState } from "react"
+import { FormEvent, useEffect, useState } from "react"
 import { toast } from "sonner"
 
 export default function SignInPage() {
-  const { login, user } = useAuth()
+  const { login, user, loading } = useAuth()
   const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [submitting, setSubmitting] = useState(false)
 
-  if (user) {
-    router.replace("/challenges")
-  }
+  useEffect(() => {
+    if (!loading && user) router.replace("/events")
+  }, [loading, user, router])
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     setSubmitting(true)
     try {
       const u = await login(email, password)
-      toast.success(`Welcome back, ${u.name}!`)
-      router.push(u.role === "organiser" ? "/host" : "/challenges")
+      toast.success(`Signed in as ${u.name}`)
+      router.push(u.role === "organiser" ? "/host" : "/events")
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : "Something went wrong. Is the API running?",
-      )
+      toast.error(err instanceof ApiError ? err.message : "Is the API running?")
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      <main className="max-w-md mx-auto px-6 py-20">
-        <div className="text-center mb-10">
-          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-r from-primary to-secondary mb-6">
-            <KeyRound className="w-7 h-7 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">Welcome back</h1>
-          <p className="text-muted-foreground">Sign in to compete in live CTF events.</p>
-        </div>
+    <AppShell>
+      <main className="mx-auto max-w-md px-4 py-20 sm:px-6">
+        <Panel>
+          <PanelHeader label="auth · sign in" />
+          <form onSubmit={onSubmit} className="space-y-5 px-6 py-7">
+            <div>
+              <label htmlFor="email" className="micro mb-1.5 block">email</label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-faint"
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="password" className="micro mb-1.5 block">password</label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-faint"
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="flex w-full items-center justify-center gap-2 border border-primary bg-primary/10 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
+            >
+              {submitting && <Spinner />} $ t6 login
+            </button>
+            <p className="text-center text-[13px] text-muted-foreground">
+              no account?{" "}
+              <Link href="/signup" className="text-primary hover:underline">sign up</Link>
+            </p>
+          </form>
+        </Panel>
 
-        <form onSubmit={onSubmit} className="bg-card border border-border rounded-xl p-8 space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          <Button
-            type="submit"
-            disabled={submitting}
-            className="w-full bg-gradient-to-r from-primary to-secondary"
-          >
-            {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Sign In
-          </Button>
-          <p className="text-center text-sm text-muted-foreground">
-            No account?{" "}
-            <Link href="/signup" className="text-primary hover:underline">
-              Sign up
-            </Link>
-          </p>
-        </form>
-
-        <div className="mt-6 text-center text-xs text-muted-foreground bg-muted/40 border border-border rounded-lg p-4">
-          <p className="font-medium mb-1">Demo accounts (after seeding):</p>
-          <p>organiser@terminal6ix.dev / organiser123</p>
-          <p>player@terminal6ix.dev / player123</p>
+        <div className="mt-4 border border-line bg-panel/50 px-4 py-3 text-[12px] leading-relaxed text-muted-foreground">
+          <span className="micro block">demo accounts</span>
+          organiser@terminal6ix.dev / organiser123
+          <br />
+          player@terminal6ix.dev / player123
         </div>
       </main>
-    </div>
+    </AppShell>
   )
 }

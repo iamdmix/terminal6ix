@@ -13,6 +13,7 @@ export interface Event {
   description: string | null
   start_time: string
   end_time: string
+  flag_format: string | null
   created_by: string
   created_at: string
   updated_at: string

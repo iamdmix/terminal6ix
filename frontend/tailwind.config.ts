@@ -25,6 +25,13 @@ const config = {
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        panel: "hsl(var(--panel))",
+        "panel-2": "hsl(var(--panel-2))",
+        line: "hsl(var(--line))",
+        faint: "hsl(var(--faint))",
+        ok: "hsl(var(--ok))",
+        info: "hsl(var(--info))",
+        danger: "hsl(var(--danger))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",

@@ -1,19 +1,16 @@
 "use client"
 
 import { useAuth } from "@/components/auth-provider"
-import { Header } from "@/components/header"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { AppShell } from "@/components/app-shell"
+import { Chip, Panel, PanelHeader, Spinner } from "@/components/ui-kit"
 import { ApiError, UserRole } from "@/lib/types"
-import { Loader2, UserPlus } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { FormEvent, useState } from "react"
+import { FormEvent, useEffect, useState } from "react"
 import { toast } from "sonner"
 
 export default function SignUpPage() {
-  const { signup, user } = useAuth()
+  const { signup, user, loading } = useAuth()
   const router = useRouter()
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
@@ -22,99 +19,128 @@ export default function SignUpPage() {
   const [role, setRole] = useState<UserRole>("participant")
   const [submitting, setSubmitting] = useState(false)
 
-  if (user) {
-    router.replace("/challenges")
-  }
+  useEffect(() => {
+    if (!loading && user) router.replace("/events")
+  }, [loading, user, router])
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     setSubmitting(true)
     try {
-      const u = await signup({
-        name,
-        email,
-        password,
-        role,
-        phone: phone || undefined,
-      })
-      toast.success(`Account created. Welcome, ${u.name}!`)
-      router.push(u.role === "organiser" ? "/host" : "/challenges")
+      const u = await signup({ name, email, password, role, phone: phone || undefined })
+      toast.success(`Account created — welcome, ${u.name}`)
+      router.push(u.role === "organiser" ? "/host" : "/events")
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : "Something went wrong. Is the API running?",
-      )
+      toast.error(err instanceof ApiError ? err.message : "Is the API running?")
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      <main className="max-w-md mx-auto px-6 py-20">
-        <div className="text-center mb-10">
-          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-r from-primary to-secondary mb-6">
-            <UserPlus className="w-7 h-7 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">Create your account</h1>
-          <p className="text-muted-foreground">Join events as a player or host your own.</p>
-        </div>
+    <AppShell>
+      <main className="mx-auto max-w-md px-4 py-20 sm:px-6">
+        <Panel>
+          <PanelHeader label="auth · register" />
+          <form onSubmit={onSubmit} className="space-y-5 px-6 py-7">
+            {/* Role selector */}
+            <div>
+              <span className="micro mb-1.5 block">role</span>
+              <div className="grid grid-cols-2 gap-px border border-line bg-line">
+                {(
+                  [
+                    { r: "participant" as UserRole, desc: "solve challenges" },
+                    { r: "organiser" as UserRole, desc: "run events" },
+                  ]
+                ).map(({ r, desc }) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setRole(r)}
+                    className={`px-4 py-3 text-left transition-colors ${
+                      role === r ? "bg-primary/10" : "bg-panel hover:bg-panel-2"
+                    }`}
+                  >
+                    <span className={`block text-sm ${role === r ? "text-primary" : "text-foreground"}`}>
+                      {r}
+                    </span>
+                    <span className="block text-[12px] text-muted-foreground">{desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        <form onSubmit={onSubmit} className="bg-card border border-border rounded-xl p-8 space-y-6">
-          <div className="grid grid-cols-2 gap-3">
-            {(["participant", "organiser"] as UserRole[]).map((r) => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setRole(r)}
-                className={`rounded-lg border p-4 text-left transition-colors ${
-                  role === r
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:border-primary/40"
-                }`}
-              >
-                <div className="font-semibold text-foreground capitalize">{r}</div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {r === "participant" ? "Solve challenges, climb the leaderboard" : "Create events and challenges"}
-                </div>
-              </button>
-            ))}
-          </div>
+            <div>
+              <label htmlFor="name" className="micro mb-1.5 block">name</label>
+              <input
+                id="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ada Lovelace"
+                className="w-full border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-faint"
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="email" className="micro mb-1.5 block">email</label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-faint"
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="phone" className="micro mb-1.5 block">
+                phone <span className="normal-case text-faint">(optional)</span>
+              </label>
+              <input
+                id="phone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+1 555 000 1234"
+                className="w-full border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-faint"
+              />
+            </div>
+            <div>
+              <label htmlFor="password" className="micro mb-1.5 block">password</label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="min 6 characters"
+                minLength={6}
+                className="w-full border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-faint"
+                required
+              />
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Neo Anderson" />
+            <button
+              type="submit"
+              disabled={submitting}
+              className="flex w-full items-center justify-center gap-2 border border-primary bg-primary/10 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
+            >
+              {submitting && <Spinner />} $ t6 register
+            </button>
+            <p className="text-center text-[13px] text-muted-foreground">
+              already registered?{" "}
+              <Link href="/signin" className="text-primary hover:underline">sign in</Link>
+            </p>
+          </form>
+        </Panel>
+
+        {role === "organiser" && (
+          <div className="mt-4 border border-line bg-panel/50 px-4 py-3 text-[12px] leading-relaxed text-muted-foreground">
+            <Chip tone="amber">organiser</Chip>{" "}
+            You'll get the host console: create events, set the flag format, load
+            challenges and watch the leaderboard fill up.
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com" />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="phone">
-              Phone <span className="text-muted-foreground">(optional)</span>
-            </Label>
-            <Input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 555 000 1234" />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} placeholder="At least 6 characters" />
-          </div>
-          <Button
-            type="submit"
-            disabled={submitting}
-            className="w-full bg-gradient-to-r from-primary to-secondary"
-          >
-            {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Create Account
-          </Button>
-          <p className="text-center text-sm text-muted-foreground">
-            Already have an account?{" "}
-            <Link href="/signin" className="text-primary hover:underline">
-              Sign in
-            </Link>
-          </p>
-        </form>
+        )}
       </main>
-    </div>
+    </AppShell>
   )
 }
