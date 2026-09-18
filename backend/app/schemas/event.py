@@ -9,6 +9,11 @@ class EventBase(BaseModel):
     description: str | None = None
     start_time: datetime
     end_time: datetime
+    flag_format: str | None = Field(
+        None,
+        max_length=32,
+        description="Flag prefix for this event, e.g. 'T6{'. Submissions must start with it when set.",
+    )
 
 
 class EventCreate(EventBase):
@@ -20,6 +25,7 @@ class EventUpdate(BaseModel):
     description: str | None = None
     start_time: datetime | None = None
     end_time: datetime | None = None
+    flag_format: str | None = Field(None, max_length=32)
 
 
 class EventOut(EventBase):

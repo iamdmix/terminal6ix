@@ -251,11 +251,18 @@ def submit_flag(
     if already_solved:
         raise HTTPException(status_code=409, detail="You already solved this challenge")
 
-    is_correct = data.flag.strip() == challenge.flag.strip()
+    submitted = data.flag.strip()
+    if event.flag_format and not submitted.startswith(event.flag_format):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid flag format for this event: flags must start with '{event.flag_format}'",
+        )
+
+    is_correct = submitted == challenge.flag.strip()
     submission = Submission(
         challenge_id=challenge_id,
         user_id=user.id,
-        submitted_flag=data.flag,
+        submitted_flag=submitted,
         is_correct=is_correct,
         points_awarded=challenge.points if is_correct else 0,
     )

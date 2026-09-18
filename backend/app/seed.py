@@ -8,12 +8,14 @@ import sys
 from datetime import datetime, timedelta
 
 from app.database import Base, SessionLocal, engine
+from app.migrations import run_migrations
 from app.models import Challenge, Event, EventRegistration, Submission, User
 from app.services.auth_service import hash_password
 
 DEMO_EVENTS = [
     {
         "name": "TerminalSix Open 2026",
+        "flag_format": "T6{",
         "description": (
             "Our flagship jeopardy-style CTF. Categories include web, crypto, "
             "reverse, forensics and pwn. Beginners welcome — hints available "
@@ -22,27 +24,32 @@ DEMO_EVENTS = [
         "start_offset_hours": -1,
         "end_offset_hours": 47,
         "challenges": [
-            ("Welcome to T6", "Join our Discord, find the flag in the #welcome channel pinned message.", "misc", "easy", 25, "flag{welcome_to_t6}", "The flag format is flag{...} and it is literally in the welcome text."),
-            ("Cookie Monster", "The admin panel remembers you... a little too well. Manipulate your session cookie to become admin.", "web", "easy", 100, "flag{cookies_are_not_secure}", "Try editing the cookie value in your browser devtools."),
-            ("RSA Primer", "We encrypted the flag with a tiny public exponent and no padding. Recover it.", "crypto", "easy", 150, "flag{e_equals_3}", "Small e means the ciphertext might be a perfect cube."),
-            ("Broken Pipeline", "Our CI logs are public. Find the leaked credential and read the private note.", "web", "medium", 300, "flag{ci_logs_leak_secrets}", "Check the workflow run logs for environment dumps."),
-            ("Strings Attached", "A memory dump from a compromised box. Find the attacker's exfiltration flag.", "forensics", "medium", 350, "flag{strings_in_memory}", "The strings utility is your friend; grep for 'flag{'."),
-            ("Rotten Firmware", "Reverse this firmware image and recover the hardcoded update key.", "reverse", "hard", 500, "flag{firmware_never_sleeps}", "The update routine XORs a constant over the config blob."),
-            ("Heap of Trouble", "Classic use-after-free in a custom allocator. Get the shell, read /flag.", "pwn", "insane", 750, "flag{heap_feng_shui_master}", "Tcache poisoning. Watch your chunk sizes."),
+            ("Welcome to T6", "Join our Discord, find the flag in the #welcome channel pinned message.", "misc", "easy", 25, "T6{welcome_to_t6}", "The flag format is T6{...} and it is literally in the welcome text."),
+            ("Cookie Monster", "The admin panel remembers you... a little too well. Manipulate your session cookie to become admin.", "web", "easy", 100, "T6{cookies_are_not_secure}", "Try editing the cookie value in your browser devtools."),
+            ("RSA Primer", "We encrypted the flag with a tiny public exponent and no padding. Recover it.", "crypto", "easy", 150, "T6{e_equals_3}", "Small e means the ciphertext might be a perfect cube."),
+            ("Broken Pipeline", "Our CI logs are public. Find the leaked credential and read the private note.", "web", "medium", 300, "T6{ci_logs_leak_secrets}", "Check the workflow run logs for environment dumps."),
+            ("Strings Attached", "A memory dump from a compromised box. Find the attacker's exfiltration flag.", "forensics", "medium", 350, "T6{strings_in_memory}", "The strings utility is your friend; grep for 'T6{'."),
+            ("Rotten Firmware", "Reverse this firmware image and recover the hardcoded update key.", "reverse", "hard", 500, "T6{firmware_never_sleeps}", "The update routine XORs a constant over the config blob."),
+            ("Heap of Trouble", "Classic use-after-free in a custom allocator. Get the shell, read /flag.", "pwn", "insane", 750, "T6{heap_feng_shui_master}", "Tcache poisoning. Watch your chunk sizes."),
         ],
     },
     {
-        "name": "Cyber Zombies Bootcamp",
+        "name": "NotDad — An OSINT Story",
+        "flag_format": "dad{",
         "description": (
-            "A 6-hour beginner-friendly bootcamp. Learn the basics of web "
-            "exploitation, OSINT and cryptography while competing for fun prizes."
+            "Dhyeya Anand Deshpande is a fictional rally driver with a digital "
+            "footprint scattered across social platforms. Piece together his "
+            "story — the small details matter, and not everything you find is "
+            "signal. A live dockerised investigation is part of the event."
         ),
-        "start_offset_hours": 24,
-        "end_offset_hours": 30,
+        "start_offset_hours": 0,
+        "end_offset_hours": 72,
         "challenges": [
-            ("Hello OSINT", "Find the city in this photo's metadata. Flag is the city name in lowercase.", "osint", "easy", 50, "flag{prague}", "EXIF data survives most social media re-uploads... but not this one."),
-            ("Basecamp", "This text looks like gibberish: ZmxhZ3tiYXNlNjRfaXNfZWFzeX0=", "misc", "easy", 25, "flag{base64_is_easy}", "That equals sign at the end is a giveaway."),
-            ("Login Bypass 101", "' OR 1=1 -- ...you know what to do.", "web", "easy", 100, "flag{classic_sqli}", "It really is the classic. No WAF here."),
+            ("The Birthday", "When was Dhyeya born? Flag is the date, lowercase, underscore-separated: dad{26_may_1974} is close enough in spirit — use the YYYY-MM-DD ordering without separators.", "osint", "easy", 50, "dad{26_05_1974}", "Check the earliest post that celebrates 'another lap around the sun'."),
+            ("Home Turf", "Where is Dhyeya originally from? Flag is the town, lowercase, underscore-separated.", "osint", "easy", 50, "dad{satara}", "His origin is a small Maharashtra town famous for forts nearby."),
+            ("The Machine", "Which motorcycle does Dhyeya adore and own? Flag is the model, lowercase, underscore-separated.", "osint", "medium", 100, "dad{royal_enfield_classic_500}", "A garage photo hides the tank badge."),
+            ("Racing Line", "Which team does Dhyeya drive for? Flag is the acronym, lowercase.", "osint", "medium", 100, "dad{swrt}", "Look closely at the rally suit and the chess.com profile bio."),
+            ("The Full Dossier", "The dockerised investigation is live at http://localhost:8080 — answer all ten questions about Dhyeya correctly and the service hands you the flag.", "osint", "hard", 500, "dad{0s1nt_1s_n0t_st4lk1ng}", "Start with the DOB; each correct field narrows the search.", "http://localhost:8080"),
         ],
     },
 ]
@@ -50,6 +57,7 @@ DEMO_EVENTS = [
 
 def seed(force: bool = False) -> None:
     Base.metadata.create_all(bind=engine)
+    run_migrations()
     db = SessionLocal()
     try:
         if not force and db.query(Event).count() > 0:
@@ -86,11 +94,14 @@ def seed(force: bool = False) -> None:
                 description=spec["description"],
                 start_time=now + timedelta(hours=spec["start_offset_hours"]),
                 end_time=now + timedelta(hours=spec["end_offset_hours"]),
+                flag_format=spec.get("flag_format"),
                 created_by=organiser.id,
             )
             db.add(event)
             db.flush()
-            for title, desc, cat, diff, pts, flag, hint in spec["challenges"]:
+            for challenge in spec["challenges"]:
+                title, desc, cat, diff, pts, flag, hint = challenge[:7]
+                connection_url = challenge[7] if len(challenge) > 7 else None
                 db.add(
                     Challenge(
                         event_id=event.id,
@@ -101,6 +112,7 @@ def seed(force: bool = False) -> None:
                         points=pts,
                         flag=flag,
                         flag_hint=hint,
+                        connection_url=connection_url,
                     )
                 )
             # Register the demo player so the leaderboard isn't empty

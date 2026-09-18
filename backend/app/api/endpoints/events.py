@@ -53,6 +53,7 @@ def _enrich_event(db: Session, event: Event, user: User | None) -> EventDetailOu
         description=event.description,
         start_time=event.start_time,
         end_time=event.end_time,
+        flag_format=event.flag_format,
         created_by=event.created_by,
         created_at=event.created_at,
         updated_at=event.updated_at,

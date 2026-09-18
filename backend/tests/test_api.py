@@ -425,3 +425,88 @@ def test_leaderboard_tiebreak(client, event, challenges):
     ).json()
     assert [e["rank"] for e in board] == [1, 2]
     assert board[0]["score"] == board[1]["score"] == 100
+
+
+# ---------------------------------------------------------------------------
+# Flag format per event
+# ---------------------------------------------------------------------------
+
+
+def test_flag_format_enforced(client, organiser):
+    now = datetime.utcnow()
+    res = client.post(
+        "/events/",
+        json={
+            "name": "Format CTF",
+            "start_time": (now - timedelta(minutes=5)).isoformat(),
+            "end_time": (now + timedelta(hours=2)).isoformat(),
+            "flag_format": "dad{",
+        },
+        headers=organiser["headers"],
+    )
+    assert res.status_code == 201
+    event = res.json()
+    assert event["flag_format"] == "dad{"
+
+    ch = client.post(
+        f"/events/{event['id']}/challenges",
+        json={
+            "title": "Quiz",
+            "description": "Solve the quiz.",
+            "category": "osint",
+            "points": 200,
+            "flag": "dad{correct_answer}",
+        },
+        headers=organiser["headers"],
+    ).json()
+
+    player = register_user(client)
+    client.post(f"/events/{event['id']}/register", headers=player["headers"])
+
+    # Wrong prefix rejected with a helpful message
+    bad = client.post(
+        f"/challenges/{ch['id']}/submit",
+        json={"flag": "flag{correct_answer}"},
+        headers=player["headers"],
+    )
+    assert bad.status_code == 400
+    assert "dad{" in bad.json()["detail"]
+
+    # Correct prefix accepted (even if the answer itself is wrong)
+    wrong = client.post(
+        f"/challenges/{ch['id']}/submit",
+        json={"flag": "dad{wrong_answer}"},
+        headers=player["headers"],
+    )
+    assert wrong.status_code == 201
+    assert wrong.json()["is_correct"] is False
+
+    # Fully correct flag scores
+    right = client.post(
+        f"/challenges/{ch['id']}/submit",
+        json={"flag": "dad{correct_answer}"},
+        headers=player["headers"],
+    )
+    assert right.status_code == 201
+    assert right.json()["is_correct"] is True
+
+
+def test_event_without_flag_format_accepts_any_prefix(client, organiser, participant, event):
+    ch = client.post(
+        f"/events/{event['id']}/challenges",
+        json={
+            "title": "Free form",
+            "description": "Any prefix goes.",
+            "points": 50,
+            "flag": "wh4t3v3r{prefix-free}",
+        },
+        headers=organiser["headers"],
+    ).json()
+    client.post(f"/events/{event['id']}/register", headers=participant["headers"])
+    res = client.post(
+        f"/challenges/{ch['id']}/submit",
+        json={"flag": "wh4t3v3r{prefix-free}"},
+        headers=participant["headers"],
+    )
+    assert res.status_code == 201
+    assert res.json()["is_correct"] is True

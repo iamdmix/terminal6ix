@@ -13,9 +13,11 @@ from app.api.endpoints import events as events_router  # noqa: E402
 from app.api.endpoints import registrations as registrations_router  # noqa: E402
 from app.api.endpoints import users as auth_router  # noqa: E402
 from app.database import Base, engine  # noqa: E402
+from app.migrations import run_migrations  # noqa: E402
 
 # This creates tables on startup (for development only)
 Base.metadata.create_all(bind=engine)
+run_migrations()
 
 
 @asynccontextmanager

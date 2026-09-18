@@ -13,6 +13,8 @@ class Event(Base):
     description = Column(Text, nullable=True)
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
+    # Flag prefix for this event, e.g. "T6{" or "dad{". Submissions must start with it when set.
+    flag_format = Column(String(32), nullable=True)
 
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     creator = relationship("User", backref="events")
