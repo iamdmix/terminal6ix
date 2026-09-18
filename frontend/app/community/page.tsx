@@ -1,71 +1,24 @@
 "use client"
 
-import { motion } from "framer-motion"
-import { Button } from "@/components/ui/button"
+import { useAuth } from "@/components/auth-provider"
 import { Header } from "@/components/header"
 import { Badge } from "@/components/ui/badge"
-import { MessageCircle, Users, Github, Twitter, Calendar } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { api } from "@/lib/api"
+import { eventStatus, formatDateTime } from "@/lib/hooks"
+import { ApiError, Event, PlatformStats } from "@/lib/types"
+import { Calendar, Github, MessageCircle, Swords, Twitter, Users } from "lucide-react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
+import { toast } from "sonner"
 
-const communityStats = [
-  { label: "Active Members", value: "15,247", icon: Users },
-  { label: "Discord Messages", value: "2.3M", icon: MessageCircle },
-  { label: "GitHub Stars", value: "8.9K", icon: Github },
-  { label: "Events Hosted", value: "156", icon: Calendar },
-]
-
-const featuredMembers = [
-  {
-    name: "Alex Chen",
-    role: "CTF Champion",
-    avatar: "🥇",
-    contributions: "Created 23 challenges",
-    speciality: "Web Security",
-  },
-  {
-    name: "Sarah Kim",
-    role: "Community Moderator",
-    avatar: "🛡️",
-    contributions: "Helped 500+ members",
-    speciality: "Cryptography",
-  },
-  {
-    name: "Marcus Johnson",
-    role: "Challenge Creator",
-    avatar: "🔧",
-    contributions: "15 expert challenges",
-    speciality: "Binary Exploitation",
-  },
-  {
-    name: "Elena Rodriguez",
-    role: "Event Organizer",
-    avatar: "🎯",
-    contributions: "Organized 12 CTFs",
-    speciality: "Forensics",
-  },
-]
-
-const upcomingEvents = [
-  {
-    title: "CyberStorm 2024",
-    date: "March 15-17, 2024",
-    type: "Competition",
-    participants: "500+",
-    prize: "$10,000",
-  },
-  {
-    title: "Beginner's Workshop",
-    date: "March 22, 2024",
-    type: "Workshop",
-    participants: "100",
-    prize: "Free",
-  },
-  {
-    title: "Advanced Crypto Challenge",
-    date: "April 5, 2024",
-    type: "Special Event",
-    participants: "50",
-    prize: "$2,000",
-  },
+const communityStatsFallback = [
+  { label: "Active Members", value: "—", icon: Users },
+  { label: "Events Hosted", value: "—", icon: Calendar },
+  { label: "Challenges", value: "—", icon: Swords },
+  { label: "Flags Captured", value: "—", icon: MessageCircle },
 ]
 
 const platforms = [
@@ -75,49 +28,95 @@ const platforms = [
 ]
 
 export default function CommunityPage() {
+  const { user, loading: authLoading } = useAuth()
+  const router = useRouter()
+  const [stats, setStats] = useState<PlatformStats | null>(null)
+  const [events, setEvents] = useState<Event[]>([])
+  const [loading, setLoading] = useState(true)
+  const [registering, setRegistering] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function load() {
+      try {
+        setStats(await api.get<PlatformStats>("/stats"))
+      } catch {
+        setStats(null)
+      }
+      if (user) {
+        try {
+          setEvents(await api.get<Event[]>("/events/"))
+        } catch (e) {
+          toast.error(e instanceof ApiError ? e.message : "Failed to load events")
+        }
+      }
+      setLoading(false)
+    }
+    if (!authLoading) load()
+  }, [authLoading, user])
+
+  async function toggleRegistration(event: Event) {
+    if (!user) {
+      router.push("/signin")
+      return
+    }
+    setRegistering(event.id)
+    try {
+      if (event.is_registered) {
+        await api.delete(`/events/${event.id}/register`)
+        toast.success(`Unregistered from ${event.name}`)
+      } else {
+        await api.post(`/events/${event.id}/register`)
+        toast.success(`Registered for ${event.name}!`)
+      }
+      setEvents(await api.get<Event[]>("/events/"))
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Action failed")
+    } finally {
+      setRegistering(null)
+    }
+  }
+
+  const statValues = stats
+    ? [
+        { label: "Registered Hackers", value: stats.users.toLocaleString(), icon: Users },
+        { label: "Events Hosted", value: stats.events.toLocaleString(), icon: Calendar },
+        { label: "Challenges", value: stats.challenges.toLocaleString(), icon: Swords },
+        { label: "Flags Captured", value: stats.flags_captured.toLocaleString(), icon: MessageCircle },
+      ]
+    : communityStatsFallback
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
 
       <main className="max-w-7xl mx-auto px-6 py-12">
-        <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-12">
+        <div className="text-center mb-12">
           <h1 className="text-4xl md:text-6xl font-bold text-foreground mb-4">
             Join Our{" "}
-            <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">Community</span>
+            <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+              Community
+            </span>
           </h1>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-            Connect with cybersecurity enthusiasts, share knowledge, and grow together in the world's most active CTF
-            community.
+            Live platform stats, real events, and a growing community of hackers.
           </p>
-        </motion.div>
+        </div>
 
-        {/* Community Stats */}
+        {/* Live platform stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-12">
-          {communityStats.map((stat, index) => (
-            <motion.div
-              key={stat.label}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="bg-card border border-border rounded-lg p-6 text-center"
-            >
+          {statValues.map((stat) => (
+            <div key={stat.label} className="bg-card border border-border rounded-lg p-6 text-center">
               <stat.icon className="w-8 h-8 text-primary mx-auto mb-2" />
               <div className="text-2xl font-bold text-foreground">{stat.value}</div>
               <div className="text-sm text-muted-foreground">{stat.label}</div>
-            </motion.div>
+            </div>
           ))}
         </div>
 
         {/* Community Platforms */}
-        <div className="grid md:grid-cols-3 gap-8 mb-12 max-w-4xl mx-auto">
+        <div className="grid md:grid-cols-3 gap-8 mb-16 max-w-4xl mx-auto">
           {platforms.map((platform) => (
-            <motion.div
-              key={platform.name}
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="bg-card border border-border rounded-lg p-8 text-center"
-            >
+            <div key={platform.name} className="bg-card border border-border rounded-lg p-8 text-center">
               <div className={`w-16 h-16 ${platform.color} rounded-2xl flex items-center justify-center mx-auto mb-6`}>
                 <platform.icon className="w-8 h-8 text-white" />
               </div>
@@ -125,69 +124,97 @@ export default function CommunityPage() {
               <Button variant="outline" className="border-primary text-primary hover:bg-primary/10 bg-transparent">
                 Join {platform.name}
               </Button>
-            </motion.div>
+            </div>
           ))}
         </div>
 
-        {/* Featured Community Members */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="mb-12"
-        >
-          <h2 className="text-3xl font-bold text-foreground text-center mb-8">Featured Community Members</h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {featuredMembers.map((member, index) => (
-              <motion.div
-                key={member.name}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.6 + index * 0.1 }}
-                className="bg-card border border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors"
-              >
-                <div className="text-4xl mb-4">{member.avatar}</div>
-                <h3 className="text-lg font-semibold text-foreground mb-1">{member.name}</h3>
-                <Badge variant="outline" className="mb-3">
-                  {member.role}
-                </Badge>
-                <p className="text-sm text-muted-foreground mb-2">{member.contributions}</p>
-                <p className="text-xs text-primary">{member.speciality}</p>
-              </motion.div>
-            ))}
+        {/* Events */}
+        <div>
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-3xl font-bold text-foreground">
+              {user ? "All Events" : "Upcoming & Live Events"}
+            </h2>
+            {!user && !authLoading && (
+              <Link href="/signup" className="text-primary hover:underline text-sm">
+                Sign up to register
+              </Link>
+            )}
           </div>
-        </motion.div>
 
-        {/* Upcoming Events */}
-        <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}>
-          <h2 className="text-3xl font-bold text-foreground text-center mb-8">Upcoming Events</h2>
-          <div className="space-y-6">
-            {upcomingEvents.map((event, index) => (
-              <motion.div
-                key={event.title}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.8 + index * 0.1 }}
-                className="bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-colors"
-              >
-                <div className="flex flex-col md:flex-row md:items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-xl font-semibold text-foreground">{event.title}</h3>
-                      <Badge variant="outline">{event.type}</Badge>
-                    </div>
-                    <p className="text-muted-foreground mb-2">{event.date}</p>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span>👥 {event.participants} participants</span>
-                      <span>💰 {event.prize} prize pool</span>
+          {loading ? (
+            <div className="space-y-4">
+              {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-28" />)}
+            </div>
+          ) : !user ? (
+            <div className="border border-dashed border-border rounded-xl p-12 text-center">
+              <p className="text-muted-foreground mb-6">
+                Sign in to see live event details, participant counts and register.
+              </p>
+              <div className="flex gap-3 justify-center">
+                <Button onClick={() => router.push("/signin")} className="bg-gradient-to-r from-primary to-secondary">
+                  Sign In
+                </Button>
+                <Button variant="outline" onClick={() => router.push("/signup")}>
+                  Create Account
+                </Button>
+              </div>
+            </div>
+          ) : events.length === 0 ? (
+            <div className="border border-dashed border-border rounded-xl p-12 text-center text-muted-foreground">
+              No events yet. Organisers can create the first one from the Host page.
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {events.map((event) => {
+                const status = eventStatus(event)
+                const ended = status.label === "Ended"
+                return (
+                  <div
+                    key={event.id}
+                    className="bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-colors"
+                  >
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2 flex-wrap">
+                          <h3 className="text-xl font-semibold text-foreground">{event.name}</h3>
+                          <Badge variant="outline" className={status.className}>{status.label}</Badge>
+                          {event.is_registered && (
+                            <Badge variant="outline" className="border-primary/40 text-primary">registered</Badge>
+                          )}
+                        </div>
+                        {event.description && (
+                          <p className="text-muted-foreground text-sm mb-2 line-clamp-2">{event.description}</p>
+                        )}
+                        <p className="text-sm text-muted-foreground">
+                          {formatDateTime(event.start_time)} → {formatDateTime(event.end_time)}
+                        </p>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground mt-2">
+                          <span>👥 {event.participant_count} registered</span>
+                          <span>⚔️ {event.challenge_count} challenges</span>
+                          <span>🏆 {event.total_points} points</span>
+                        </div>
+                      </div>
+                      <Button
+                        disabled={ended || registering === event.id}
+                        variant={event.is_registered ? "outline" : "default"}
+                        onClick={() => toggleRegistration(event)}
+                        className={event.is_registered ? "" : "bg-gradient-to-r from-primary to-secondary"}
+                      >
+                        {ended
+                          ? "Ended"
+                          : registering === event.id
+                            ? "..."
+                            : event.is_registered
+                              ? "Unregister"
+                              : "Register"}
+                      </Button>
                     </div>
                   </div>
-                  <Button className="mt-4 md:mt-0 bg-gradient-to-r from-primary to-secondary">Register Now</Button>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </main>
     </div>
   )
