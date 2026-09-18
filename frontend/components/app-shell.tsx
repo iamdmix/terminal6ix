@@ -168,7 +168,7 @@ function StatusBar() {
         </span>
         {deadline && countdown && (
           <span className="hidden truncate sm:inline">
-            <span className="text-faint">⏳</span> {deadline.label} in{" "}
+            <span className="text-faint">next:</span> {deadline.label} in{" "}
             <span className="text-primary">{countdown}</span>
           </span>
         )}

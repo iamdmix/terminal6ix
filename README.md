@@ -2,7 +2,8 @@
 
 A full-stack Capture The Flag platform: FastAPI + PostgreSQL backend, Next.js 14 frontend.
 Players register for events, solve challenges by submitting flags, and climb a live leaderboard.
-Organisers create events, manage challenges, and watch the rankings in real time.
+Organisers create events, set each event's flag format, manage challenges — including
+dockerised services — and watch the rankings in real time.
 
 ## Features
 
@@ -11,21 +12,25 @@ Organisers create events, manage challenges, and watch the rankings in real time
 - `participant` and `organiser` roles with enforced permissions
 
 **Dynamic CTF engine**
-- Events with start/end windows, live status (Upcoming / Live / Ended)
-- Challenges in 7 categories (web, crypto, reverse, forensics, pwn, osint, misc) and 4 difficulty tiers
+- Events with start/end windows, live status (upcoming / live / ended) and countdowns
+- **Per-event flag format** — organisers set a prefix (e.g. `T6{`, `dad{`); submissions not
+  matching it are rejected with a clear message
+- Challenges in 7 categories (web, crypto, reverse, forensics, pwn, osint, misc), 4 difficulty
+  tiers, hints, optional live-service URL (e.g. a dockerised challenge) and attachment URL
 - Flag submission with every attempt recorded; first correct solve scores the full points
-- Hints that players can reveal per challenge
-- Event registration required to view/submit challenges
-- Live leaderboard: score, solved count, last-solve tiebreak, auto-refresh every 15s
-- Progress tracking ("my solves") and public platform stats
+- Event registration required to submit; submissions close when the event ends
+- Live leaderboard: podium + rankings, last-solve tiebreak, auto-refresh every 15s
 
 **Frontend**
-- Marketing landing page
-- `/challenges` — event picker, filters, flag submission dialog, solved badges
-- `/leaderboard` — live rankings with your performance panel
-- `/community` — live platform stats and event list with one-click registration
-- `/host` — organiser dashboard: create events, add/edit/delete challenges
-- `/signin`, `/signup` with role selection
+- Phosphor-terminal design system: warm charcoal, amber signal, mono data, tmux-style
+  status bar with UTC clock, API pulse and next-event countdown
+- `/` — landing with live platform stats
+- `/events` — event index with live/registration state
+- `/events/[id]` — the play page: challenge directory, filters, hints, flag submission, attempt log
+- `/dashboard` — participant view: per-event progress, points, recent solves
+- `/host` — organiser console: events, challenge CRUD (flags visible), top-3 board
+- `/leaderboard` — event tabs, podium, dense rankings
+- Old routes `/challenges` and `/community` redirect to `/events`
 
 ## Project structure
 
@@ -34,6 +39,7 @@ backend/
   app/
     main.py               # FastAPI app, CORS, routers, /health, /stats
     database.py           # SQLAlchemy engine/session
+    migrations.py         # idempotent additive migrations
     api/deps.py           # get_current_user, require_organiser, require_participant
     api/endpoints/
       users.py            # /auth/signup, /auth/login, /auth/me, /auth/me/solves
@@ -43,11 +49,11 @@ backend/
     models/               # User, Event, Challenge, Submission, EventRegistration
     schemas/              # Pydantic schemas
     services/             # auth_service (JWT/bcrypt), user_service
-    seed.py               # demo data
-  tests/                  # pytest suite (21 tests)
+    seed.py               # demo data (2 events incl. NotDad OSINT)
+  tests/                  # pytest suite (23 tests)
 frontend/
   app/                    # Next.js App Router pages
-  components/             # shadcn/ui kit + auth-provider, header
+  components/             # app shell, ui-kit, auth-provider, shadcn primitives
   lib/                    # api client, types, hooks
 ```
 
@@ -62,6 +68,23 @@ docker run -d --name terminal6ix-db \
   -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=terminal6ix \
   -p 5432:5432 postgres:16-alpine
 ```
+
+### 1b. Dockerised challenge (NotDad OSINT demo)
+
+The seeded event **"NotDad — An OSINT Story"** includes a challenge that links to a live
+dockerised OSINT quiz ([iamdmix/not-dad](https://github.com/iamdmix/not-dad)). Players answer
+ten questions about a fictional rally driver inside the container and the service hands back
+the flag — which must match the seeded flag (event format: `dad{`):
+
+```bash
+git clone https://github.com/iamdmix/not-dad /tmp/not-dad
+docker build -t notdad /tmp/not-dad
+docker run -d --name notdad -p 8080:8080 notdad \
+  sh -c "/root/gen_flag 'dad{0s1nt_1s_n0t_st4lk1ng}' && python main.py"
+```
+
+Then open http://localhost:8080 and solve. The `service url` field on any challenge
+(editable in the host console) is how you wire in your own dockerised challenges.
 
 ### 2. Backend
 
